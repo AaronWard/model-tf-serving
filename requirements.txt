@@ -1,0 +1,7 @@
+numpy==1.12.1
+Flask==0.12.2
+keras==2.1.2
+tensorflow==1.4.0
+scipy
+pillow==4.0.0
+h5py
