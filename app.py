@@ -17,7 +17,9 @@ preprocess your request and postprocess your result
 """
 app = Flask(__name__)
 CORS(app) # needed for cross-domain requests, allow everything by default
+app.config['CORS_HEADERS'] = 'Content-Type'
 MODEL_PATH = os.getcwd() + '/data/'
+
 
 
 
@@ -47,6 +49,7 @@ def data_preprocessing(data):
 # Every incoming POST request will run the `evaluate` method
 # The request method is POST (this method enables your to send arbitrary data to the endpoint in the request body, including images, JSON, encoded-data, etc.)
 @app.route('/api', methods=["POST"])
+@cross_origin()
 def evaluate():
 
     print('Got to evaluate...')
