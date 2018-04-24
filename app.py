@@ -1,46 +1,103 @@
-from flask import Flask, request, jsonify
+import numpy as np 
+import os as os, os.path
+import sys
+import re
+# sys.path.append(os.path.abspath('./model'))
+from scipy.misc.pilutil import imsave, imread, imresize
+from PIL import Image
+from flask import (Flask, request, g, redirect, url_for, abort, Response, jsonify)
 from flask_cors import CORS
-from serve import get_model_api 
+import base64
+import tensorflow as tf
 
 
+"""
+Import all the dependencies you need to load the model, 
+preprocess your request and postprocess your result
+"""
 app = Flask(__name__)
 CORS(app) # needed for cross-domain requests, allow everything by default
-model_api = get_model_api()
+MODEL_PATH = os.getcwd() + '/data/'
 
-# default route
-@app.route('/')
-def index():
-    return "root DIR for the tensorflow model"
 
+
+# def load_model(MODEL_PATH):
+#     """Load the model"""
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
+sess = tf.Session('', tf.Graph())
+with sess.graph.as_default():       
+    saver = tf.train.import_meta_graph(MODEL_PATH + "trained_model.ckpt.meta")
+    saver.restore(sess, MODEL_PATH + "trained_model.ckpt")
+
+        # Get pointers to relevant tensors in graph
+    graph = tf.get_default_graph()
+    x = graph.get_tensor_by_name("X_placeholder:0") # input
+    y = graph.get_tensor_by_name("Y_placeholder:0") # label - not using this, unless we want to calculate loss
+    is_training = graph.get_tensor_by_name( "is_training:0" ) # have to feed False to make sure batch norm and dropout behaves accordingly
+    prediction = graph.get_tensor_by_name( "Prediction:0" ) # these will be results
+
+
+def data_preprocessing(data):
+    """Preprocess the request data to transform it to a format that the model understands"""
+    imgstr = re.search(b'base64,(.*)',data).group(1)
+    with open('output.jpg','wb') as output:
+         output.write(base64.b64decode(imgstr))
     
+# Every incoming POST request will run the `evaluate` method
+# The request method is POST (this method enables your to send arbitrary data to the endpoint in the request body, including images, JSON, encoded-data, etc.)
+@app.route('/api', methods=["POST"])
+def evaluate():
 
-# HTTP Errors handlers
-@app.errorhandler(404)
-def url_error(e):
-    return """
-    Wrong URL!
-    <pre>{}</pre>""".format(e), 404
+    print('Got to evaluate...')
 
-@app.errorhandler(500)
-def server_error(e):
-    return """
-    An internal error occurred: <pre>{}</pre>
-    See logs for full stacktrace.
-    """.format(e), 500
+    imageData = request.get_data()
+    # CODE FOR DATA PREPROCESSING
+    data_preprocessing(imageData)
+    print('1: Image was converted')
 
+    image = Image.open('output.jpg')
+    image = image.convert('L')
+    image = image.resize((50, 50), Image.ANTIALIAS)
+    print('Resized and Grayscaled Image') 
 
-@app.route('/api', methods=['POST'])
+    image = np.expand_dims(np.array(image), axis = 0)
+    classification = sess.run(prediction, feed_dict = {x: image, is_training : True})   
+    classes = np.argmax( classification, axis = 1 ) # add highest probability result to classes
+
+    res = 'undefined'
+    if   classes[0] == 0:
+        print('Predicted: Angry')
+        res = 'Angry'
+    elif classes[0] == 1:
+        print('Predicted: Fear')
+        res = 'Fear'
+    elif classes[0] == 2:
+        print('Predicted: Happy')
+        res = 'Happy'
+    elif classes[0] == 3:
+        print('Predicted: neutral')
+        res = 'Neutral'
+    elif classes[0] == 4:
+        print('Predicted: sad')
+        res = 'Sad'
+    elif classes[0] == 5:
+        print('Predicted: Suprised')
+        res = 'Suprised'
+
+    return jsonify(res)
+@app.route('/api', methods=["GET"])
 def api():
-    input_data = request.json
 
-    output_data = model_api(input_data)
-
-    response = jsonify(output_data)
-    
-    return response
+    return 'Get Request Recieved...'
 
 
 
+
+# Load the model and run the server
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 6000))
-    app.run(host='0.0.0.0', port=port)
+    print(("* Loading model and starting Flask server..."
+        "please wait until server has fully started"))
+    app.debug = True
+    # load_model(MODEL_PATH)
+    app.run(host='0.0.0.0')
