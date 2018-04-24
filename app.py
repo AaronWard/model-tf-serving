@@ -6,7 +6,7 @@ import re
 from scipy.misc.pilutil import imsave, imread, imresize
 from PIL import Image
 from flask import (Flask, request, g, redirect, url_for, abort, Response, jsonify)
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 import base64
 import tensorflow as tf
 
